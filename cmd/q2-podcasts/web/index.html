@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Q2 Podcasts</title>
+<style>
+:root {
+  --bg: #f4f4f6; --card: #fff; --ink: #18181b; --muted: #6b6b76; --line: #e3e3e8;
+  --accent: #8e44c9; --accent-ink: #fff; --bad: #c0392b; --good: #2e7d4f; --radius: 12px;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0f0f12; --card: #1b1b20; --ink: #ececf1; --muted: #9a9aa6; --line: #2c2c33; --accent: #b77be6; --accent-ink: #120a18; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 680px; margin: 0 auto; padding: 16px 16px 48px; }
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 8px 0 16px; }
+h1 { font-size: 26px; margin: 0; letter-spacing: -0.01em; }
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 24px 4px 8px; font-weight: 600; }
+.muted { color: var(--muted); font-size: 14px; }
+.card { background: var(--card); border-radius: var(--radius); border: 1px solid var(--line); overflow: hidden; }
+.row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-top: 1px solid var(--line); min-height: 56px; }
+.row:first-child { border-top: 0; }
+.row.tap { cursor: pointer; }
+.row .grow { flex: 1; min-width: 0; }
+.title { font-weight: 600; overflow-wrap: anywhere; }
+.sub { color: var(--muted); font-size: 14px; overflow-wrap: anywhere; }
+.art { width: 48px; height: 48px; border-radius: 8px; background: var(--line); flex: none; object-fit: cover; }
+form.add { display: flex; gap: 8px; }
+input[type=text], input[type=search], input[type=password] { flex: 1; min-width: 0; font: inherit; padding: 12px 14px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--card); color: var(--ink); }
+button, .button { font: inherit; font-weight: 600; font-size: 15px; border: 0; border-radius: 999px; padding: 9px 16px; background: var(--accent); color: var(--accent-ink); cursor: pointer; white-space: nowrap; text-decoration: none; display: inline-block; }
+button.quiet, .button.quiet { background: transparent; color: var(--accent); border: 1px solid var(--line); }
+button.bad { background: transparent; color: var(--bad); border: 1px solid var(--line); }
+button:disabled { opacity: 0.5; cursor: default; }
+.bar { height: 4px; background: var(--line); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--accent); }
+.tools { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.back { background: none; color: var(--accent); padding: 0; margin-bottom: 8px; }
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-size: 14px; max-width: calc(100% - 32px); opacity: 0; transition: opacity .2s; pointer-events: none; }
+.toast.on { opacity: 1; }
+.empty { padding: 20px 14px; color: var(--muted); }
+.switch { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+.hidden { display: none !important; }
+#login { max-width: 360px; margin: 18vh auto 0; text-align: center; }
+#login form { display: flex; gap: 8px; margin-top: 16px; }
+</style>
+</head>
+<body>
+<main>
+  <section id="login" class="hidden">
+    <h1>Q2 Podcasts</h1>
+    <p class="muted">Type the PIN on the Q2's screen (Streaming → Podcasts → Add from Your Phone).</p>
+    <form id="loginForm"><input id="pin" type="password" inputmode="numeric" autocomplete="one-time-code" placeholder="PIN"><button>Sign in</button></form>
+  </section>
+
+  <section id="home" class="hidden">
+    <header><h1>Podcasts</h1><span class="muted" id="summary"></span></header>
+    <form class="add" id="addForm">
+      <input id="addInput" type="search" placeholder="Search, or paste a feed address" autocomplete="off" autocapitalize="off">
+      <button id="addButton">Go</button>
+    </form>
+    <div id="results" class="hidden"><h2 id="resultsTitle">Results</h2><div class="card" id="resultsList"></div></div>
+    <div id="downloads" class="hidden"><h2>Downloads</h2><div class="card" id="jobsList"></div></div>
+    <h2>Shows</h2>
+    <div class="card" id="showsList"></div>
+    <div class="tools">
+      <button class="quiet" id="refreshAll">Refresh all</button>
+      <label class="button quiet">Import OPML<input id="opmlFile" type="file" accept=".opml,.xml,text/xml" class="hidden"></label>
+      <a class="button quiet" href="/api/opml">Export OPML</a>
+    </div>
+    <p class="muted" id="version"></p>
+  </section>
+
+  <section id="show" class="hidden">
+    <button class="back" id="backButton">‹ Shows</button>
+    <div class="card"><div class="row">
+      <img class="art" id="showArt" alt="">
+      <div class="grow"><div class="title" id="showTitle"></div><div class="sub" id="showSub"></div></div>
+    </div></div>
+    <div class="tools">
+      <label class="switch"><input type="checkbox" id="showAuto"> Download new episodes</label>
+    </div>
+    <div class="tools">
+      <button class="quiet" id="showRefresh">Refresh</button>
+      <button class="bad" id="showUnsub">Unsubscribe</button>
+    </div>
+    <h2>Episodes</h2>
+    <div class="card" id="episodesList"></div>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+let current = null; // the open show's key
+let toastTimer = 0;
+
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("on"), 2600);
+}
+
+async function api(path, body) {
+  const opts = body === undefined ? {} : {method: "POST", headers: {"X-Q2": "1"},
+    body: typeof body === "string" ? body : JSON.stringify(body)};
+  const r = await fetch("/api/" + path, opts);
+  const data = await r.json().catch(() => ({}));
+  if (r.status === 401) { show("login"); throw new Error("Sign in first"); }
+  if (!r.ok) throw new Error(data.error || "Something went wrong (" + r.status + ")");
+  return data;
+}
+
+function show(view) {
+  for (const v of ["login", "home", "show"]) $(v).classList.toggle("hidden", v !== view);
+}
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+function size(b) {
+  if (!b || b <= 0) return "";
+  if (b < 1 << 20) return Math.ceil(b / 1024) + " KB";
+  if (b < 1 << 30) return Math.round(b / (1 << 20)) + " MB";
+  return (b / (1 << 30)).toFixed(1) + " GB";
+}
+function length(s) {
+  if (!s) return "";
+  if (s < 3600) return Math.round(s / 60) + " min";
+  const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60);
+  return m ? h + " hr " + m + " min" : h + " hr";
+}
+function day(iso) {
+  if (!iso || iso.startsWith("0001")) return "";
+  const d = new Date(iso), now = new Date();
+  return d.toLocaleDateString(undefined, d.getFullYear() === now.getFullYear()
+    ? {day: "numeric", month: "short"} : {day: "numeric", month: "short", year: "numeric"});
+}
+const join = (...p) => p.filter(Boolean).join(" · ");
+
+function row(title, sub, opts = {}) {
+  const r = el("div", "row" + (opts.onclick ? " tap" : ""));
+  if (opts.art !== undefined) {
+    const img = el("img", "art");
+    img.alt = "";
+    img.loading = "lazy";
+    if (opts.art) img.src = opts.art;
+    r.append(img);
+  }
+  const g = el("div", "grow");
+  g.append(el("div", "title", title));
+  if (sub) g.append(el("div", "sub", sub));
+  if (opts.progress !== undefined) {
+    const bar = el("div", "bar"), fill = el("i");
+    fill.style.width = Math.max(2, opts.progress) + "%";
+    bar.append(fill);
+    g.append(bar);
+  }
+  r.append(g);
+  for (const b of opts.buttons || []) r.append(b);
+  if (opts.onclick) r.onclick = opts.onclick;
+  return r;
+}
+
+function button(label, cls, fn) {
+  const b = el("button", cls, label);
+  b.onclick = async e => {
+    e.stopPropagation();
+    b.disabled = true;
+    try { await fn(); } catch (err) { toast(err.message); } finally { b.disabled = false; }
+  };
+  return b;
+}
+
+function jobLine(j) {
+  if (j.state === "active") return "Downloading " + (j.size > 0 ? Math.floor(j.done * 100 / j.size) + "% of " + size(j.size) : size(j.done));
+  if (j.state === "failed") return "Couldn't download: " + j.error;
+  return j.error ? "Trying again soon: " + j.error : "Waiting";
+}
+
+function renderHome(s) {
+  $("summary").textContent = join(s.downloaded ? s.downloaded + " on the Q2 (" + size(s.bytes) + ")" : "",
+    s.refreshing ? "updating…" : "");
+  $("version").textContent = "Q2 Podcasts " + s.version.replace("q2-", "");
+  const jobs = $("jobsList");
+  jobs.replaceChildren();
+  $("downloads").classList.toggle("hidden", !s.jobs.length);
+  for (const j of s.jobs) {
+    const pct = j.state === "active" && j.size > 0 ? j.done * 100 / j.size : undefined;
+    jobs.append(row(j.title, join(j.show, jobLine(j)), {progress: pct, buttons: [
+      j.state === "failed"
+        ? button("Retry", "quiet", () => api("download", {key: j.key, eid: j.eid}).then(refresh))
+        : button("Cancel", "quiet", () => api("cancel", {key: j.key, eid: j.eid}).then(refresh))]}));
+  }
+  const list = $("showsList");
+  list.replaceChildren();
+  if (!s.shows.length) list.append(el("div", "empty", "No shows yet. Search above, paste a feed's address, or import OPML from another podcast app."));
+  for (const sh of s.shows) {
+    const sub = sh.error && !sh.episodes ? "Couldn't load: " + sh.error
+      : sh.refreshing && !sh.episodes ? "Loading…"
+      : join(sh.author, sh.episodes + " episodes", sh.onCard ? sh.onCard + " on the Q2" : "", sh.auto ? "auto" : "");
+    list.append(row(sh.title, sub, {art: sh.image || "", onclick: () => openShow(sh.key)}));
+  }
+}
+
+function renderShow(d) {
+  const sh = d.show;
+  $("showTitle").textContent = sh.title;
+  $("showSub").textContent = join(sh.author, sh.error ? "Couldn't update: " + sh.error : "", sh.refreshing ? "updating…" : "");
+  if (sh.image && $("showArt").getAttribute("src") !== sh.image) $("showArt").src = sh.image;
+  $("showAuto").checked = sh.auto;
+  const list = $("episodesList");
+  list.replaceChildren();
+  if (!d.episodes.length) list.append(el("div", "empty", sh.refreshing ? "Loading…" : "No audio episodes in this feed."));
+  for (const e of d.episodes) {
+    const when = join(day(e.date), length(e.duration));
+    const id = {key: sh.key, eid: e.eid};
+    let sub, btn, pct;
+    if (e.onCard) {
+      sub = join(when, "on the Q2", size(e.size));
+      btn = button("Delete", "bad", async () => {
+        if (!confirm("Delete “" + e.title + "” from the Q2?")) return;
+        await api("delete", id); refresh();
+      });
+    } else if (e.job) {
+      sub = join(when, jobLine(e.job));
+      if (e.job.state === "active" && e.job.size > 0) pct = e.job.done * 100 / e.job.size;
+      btn = e.job.state === "failed"
+        ? button("Retry", "quiet", () => api("download", id).then(refresh))
+        : button("Cancel", "quiet", () => api("cancel", id).then(refresh));
+    } else {
+      sub = join(when, size(e.length));
+      btn = button("Download", "", async () => { toast((await api("download", id)).message); refresh(); });
+    }
+    list.append(row(e.title, sub, {progress: pct, buttons: [btn]}));
+  }
+}
+
+let busy = false;
+async function refresh() {
+  if (busy) return;
+  busy = true;
+  try {
+    if (current) {
+      renderShow(await api("show?key=" + encodeURIComponent(current)));
+    } else {
+      renderHome(await api("state"));
+    }
+  } catch (err) {
+    if (current && /isn't subscribed/.test(err.message)) { current = null; show("home"); }
+  } finally { busy = false; }
+}
+
+function openShow(key) {
+  current = key;
+  $("episodesList").replaceChildren();
+  $("showArt").removeAttribute("src");
+  show("show");
+  window.scrollTo(0, 0);
+  refresh();
+}
+
+function looksLikeURL(s) {
+  return /:\/\//.test(s) || /^www\./i.test(s) || (!/\s/.test(s) && /\./.test(s) && /\//.test(s));
+}
+
+$("addForm").onsubmit = async e => {
+  e.preventDefault();
+  const q = $("addInput").value.trim();
+  if (!q) return;
+  $("addButton").disabled = true;
+  try {
+    if (looksLikeURL(q)) {
+      toast("Fetching the feed…");
+      const sh = await api("subscribe", {url: q});
+      toast("Subscribed to " + sh.title);
+      $("addInput").value = "";
+      $("results").classList.add("hidden");
+      refresh();
+    } else {
+      const found = await api("search?q=" + encodeURIComponent(q));
+      const list = $("resultsList");
+      list.replaceChildren();
+      $("resultsTitle").textContent = found.length ? "Results for “" + q + "”" : "Nothing found for “" + q + "”";
+      for (const r of found) {
+        const b = r.subscribed ? el("span", "muted", "Subscribed") : button("Subscribe", "", async () => {
+          toast("Fetching the feed…");
+          const sh = await api("subscribe", {url: r.url});
+          toast("Subscribed to " + sh.title);
+          b.replaceWith(el("span", "muted", "Subscribed"));
+          refresh();
+        });
+        list.append(row(r.title, join(r.author, r.genre, r.episodes ? r.episodes + " episodes" : ""), {buttons: [b]}));
+      }
+      $("results").classList.remove("hidden");
+    }
+  } catch (err) { toast(err.message); } finally { $("addButton").disabled = false; }
+};
+
+$("loginForm").onsubmit = async e => {
+  e.preventDefault();
+  try {
+    await api("login", {PIN: $("pin").value});
+    show("home");
+    refresh();
+  } catch (err) { toast(err.message); }
+};
+
+$("backButton").onclick = () => { current = null; show("home"); refresh(); };
+$("refreshAll").onclick = () => api("refresh", {}).then(() => { toast("Updating every show"); refresh(); }, err => toast(err.message));
+$("showRefresh").onclick = () => api("refresh", {key: current}).then(() => { toast("Updating"); refresh(); }, err => toast(err.message));
+$("showAuto").onchange = e => api("auto", {key: current, on: e.target.checked}).then(refresh, err => toast(err.message));
+$("showUnsub").onclick = async () => {
+  if (!confirm("Unsubscribe from “" + $("showTitle").textContent + "”? Downloaded episodes stay on the Q2.")) return;
+  try { await api("unsubscribe", {key: current}); current = null; show("home"); refresh(); } catch (err) { toast(err.message); }
+};
+$("opmlFile").onchange = async e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  try {
+    const r = await api("opml", await f.text());
+    toast("Added " + r.added + " of " + r.found + " shows");
+    refresh();
+  } catch (err) { toast(err.message); }
+  e.target.value = "";
+};
+
+(async () => {
+  try { renderHome(await api("state")); show("home"); } catch (err) { /* api() showed the sign-in */ }
+  setInterval(() => { if (!document.hidden && (current || !$("home").classList.contains("hidden"))) refresh(); }, 2500);
+})();
+</script>
+</body>
+</html>

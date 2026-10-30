@@ -1,0 +1,106 @@
+Shanling Q2 tools
+=================
+
+The Q2 runs Linux 5.10 on an Ingenic X2000 (MIPS32r2, nan2008) with glibc 2.28, no IPv6 and no CA
+bundle. q2-podcasts runs from the card's .podcasts folder as a Q2 Pod card app (q2-pod's
+patch/addon.c): Q2 Pod lists it in Streaming, starts it from that row, draws its page and keeps the
+Q2 awake while it downloads. Nothing is flashed for it.
+
+  build.sh     static Go for the Q2 and the card files, in target/shanlingq2/.podcasts, zipped as
+               target/shanlingq2/q2-podcasts-vX.Y-SHA.zip (unzip that at the card's root)
+  package.py   checks the binary (static, MIPS32 little-endian, soft-float ABI), sets the nan2008
+               ELF flag the Q2's kernel requires and Go doesn't, and writes the ZIP (from
+               q2-filebrowser)
+  launcher.sh  installed as .podcasts/run: q2-podcasts copied to /tmp and run there at nice 10 in a
+               restart loop
+  q2app        installed as .podcasts/q2app: the card app manifest (name=Podcasts, search=Search
+               Podcasts, qr=0: the QR code opens from a row, not at every start)
+  icon.png, icon-40.png
+               installed beside it: Streaming's row icon, 52 px (Legacy) and 40 px (iPod), Q2 Pod's
+               own Podcasts icon, so the row matches Library -> Podcasts
+  test_launcher.py
+               runs launcher.sh on the host with a fake app
+
+Build
+-----
+
+  contrib/shanlingq2/build.sh [OUT]
+
+Go 1.22 or later and python3. The binary is CGO_ENABLED=0 GOOS=linux GOARCH=mipsle GOMIPS=softfloat,
+static, so it needs none of the Q2's libraries and the firmware's -mfp64 doesn't matter. HTTPS is
+checked against Mozilla's CA bundle, which the app carries (internal/tlsroots). On a Q2 whose clock
+was never set, certificates are checked at the time a plain-HTTP Date header gives.
+
+Device
+------
+
+Q2 Pod runs /bin/sh /mnt/mmc/.podcasts/run when Streaming's Podcasts row is pressed and it isn't
+running. The launcher copies q2-podcasts and itself to /tmp and leaves the card at once, so USB
+storage can always take the card. The loop restarts it after a failure, waiting 5 s and doubling to
+a minute, and leaves its pid in /tmp/q2-podcasts. An exit of 0 (turned off from the Q2, or idle 15
+minutes with nothing to download) ends the loop. A TERM to it stops q2-podcasts cleanly, keeping a
+download under way in .podcasts/partial to resume. Q2 Pod sends it for Stop Streaming Services,
+Home's Rockbox row, an Apps update or remove, and USB storage (after which it starts it again).
+
+  /tmp/q2-podcasts.state
+      addr (the phone page's, with its port), pin, qr and qrsize (the code for the address with the
+      key), note, hold (1: a feed is being fetched, a download can run, or the phone page was used
+      in the last 5 minutes), version
+  /tmp/q2-podcasts.sock
+      datagrams: q quits
+  /tmp/q2-podcasts.browse.sock
+      Q2SPOT/1 (q2-pod's docs/librespot.md) for the Q2's page, below
+  port 8100 (the next free one if taken)
+      the phone page and its JSON API, behind the cookie: GET /api/state, /api/show?key=,
+      /api/search?q=, /api/opml; POST /api/subscribe {url}, /api/unsubscribe {key}, /api/auto
+      {key, on}, /api/refresh {key?}, /api/download, /api/cancel, /api/delete {key, eid}, /api/opml
+      (the file as the body). POST /api/login takes the PIN; /?k=KEY sets the cookie. Every POST
+      needs the header X-Q2: 1.
+
+Downloads go one at a time to .podcasts/partial/<key>-<eid>.part in 512 KB chunks, each opened,
+written, synced and closed, so the card is almost never busy. A break resumes with an HTTP Range;
+a server that answers 200 instead starts the file again. 60 s without a byte is a stall. A whole file
+is renamed into Podcasts/<Show>/ and dated to the episode. A failure for the network is tried
+again after 10, 20 and 40 s; a 404, a web page instead of audio, or a full card fails at once, and
+Retry tries again. The card keeps 32 MB free.
+
+The page
+--------
+
+Each row's kind says what a press does (q2-pod's patch/addon.c): list opens a level, action sends an
+op and toasts its reply, search opens the Q2's keyboard, remote opens the QR code, local plays from
+the card, info does nothing. A row's position is the op Play/Pause held sends. A reply whose message
+is "refresh" is asked again every 2 s while on screen.
+
+  menu
+      New Episodes, Shows, Downloaded, Downloads (while there are any), Search Podcasts, Add from
+      Your Phone (remote), Refresh All, Turn Off Podcasts; refresh while fetching or downloading
+  shows
+      list rows: show <key>
+  show <key> [cursor]
+      Show Options (opts <key>), then 40 episodes a page, newest first. An episode on the card is a
+      local row: its path, context album (Q2 Pod plays the folder in name order, so on into the
+      show's later episodes), position del:<key>:<eid>. Otherwise action get <key>:<eid>, or cancel
+      while waiting or downloading
+  opts <key>
+      refresh1, auto, getlatest, wipe and unsub (each of the last two asks for a second press
+      within 5 s), and the feed's host (the rest of its address may hold a paid feed's key)
+  latest [cursor], downloaded [cursor]
+      the newest 100 episodes of every show; every episode on the card
+  downloads
+      the queue: cancel or get each; retryall, cancelall
+  search <term>
+      a name: the iTunes Search API's podcasts (list rows: preview <key>). An address, a web page
+      that names its feed, or an Apple Podcasts link: preview of that feed
+  preview <key> [cursor]
+      fetched in the background (Loading..., refresh) then sub <key> and the episodes; once
+      subscribed, the show's page
+  del:<key>:<eid>
+      Play/Pause held twice within 5 s on an episode on the card deletes it
+
+Ids: a show's key is the first 10 hex digits of SHA-1 of the URL it was subscribed from, kept in
+subscriptions.opml (q2key) when the feed moves (itunes:new-feed-url is followed); an episode's is
+the same of its guid. Paths stay under 240 bytes, inside songs_open's 256-byte buffer: a show's folder
+is at most 64 bytes and an episode's file 150, with the characters FAT refuses replaced. Two
+episodes of a show that would share a name both get " [<id>]" before the extension, which Q2 Pod's
+song lists leave off.
